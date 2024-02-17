@@ -1,1 +1,104 @@
+#!/usr/bin/env python3
+
+import subprocess
+import sys
+import os
+
+def install_ffmpeg():
+    print("Installing ffmpeg...")
+    # You can adjust the package manager command based on your system (apt for Linux, pkg for Termux)
+    subprocess.run(['pkg', 'update'])
+    subprocess.run(['pkg', 'install', 'ffmpeg', '-y'])
+
+def display_help():
+    print("Usage: Grandpa [-v|-a|-s|-d|-r] input_file [output_file] [options]")
+    print("\nOptions:")
+    print("  -v               Video compression")
+    print("  -a               Audio extraction or adding subtitles")
+    print("  -s               Add subtitles or extract subtitles (use with -a)")
+    print("  -d               Use default subtitles (use with -s)")
+    print("  -r               Remove audio or specific audio tracks (use with -a)")
+    print("  -t               Add or remove specific audio tracks, specify track numbers separated by commas (use with -a or -r)")
+    print("  input_file       Input video file")
+    print("  output_file      Output file name (optional, defaults to input_file appended with track numbers or '_output' if not provided)")
+
+def main():
+    if any(arg in sys.argv for arg in ['-help', '-h', '--help', '--h']):
+        display_help()
+        sys.exit(0)
+
+    if len(sys.argv) < 3 or sys.argv[1] not in ['-v', '-a', '-s', '-d', '-r']:
+        print("Invalid command or options. Use '-help' for usage information.")
+        sys.exit(1)
+
+    input_file = sys.argv[2]
+
+    if len(sys.argv) < 4:
+        output_file = os.path.splitext(os.path.basename(input_file))[0] + '_output.mp4'
+    else:
+        output_file = sys.argv[3]
+
+    try:
+        # Check if ffmpeg is installed
+        result = subprocess.run(['ffmpeg', '-version'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    except FileNotFoundError:
+        install_ffmpeg()
+        # Re-check after installation
+        try:
+            result = subprocess.run(['ffmpeg', '-version'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        except FileNotFoundError:
+            print("ffmpeg installation failed. Please install it manually and try again.")
+            sys.exit(1)
+
+    if result.returncode == 0:
+        # ffmpeg is installed or already present
+        if sys.argv[1] == '-v':
+            # Video compression
+            if len(sys.argv) < 4:
+                print("Insufficient arguments. Usage: ./ffmpeg_script.py -v input_file output_file")
+            else:
+                subprocess.run(['ffmpeg', '-i', input_file, '-c:v', 'libx264', '-crf', '23', '-c:a', 'aac', '-strict', 'experimental', output_file])
+        elif sys.argv[1] == '-a':
+            # Audio extraction or adding subtitles
+            if '-r' in sys.argv:
+                if '-all' in sys.argv:
+                    subprocess.run(['ffmpeg', '-i', input_file, '-an', output_file])
+                elif '-t' in sys.argv and sys.argv.index('-t') + 1 < len(sys.argv):
+                    track_numbers = sys.argv[sys.argv.index('-t') + 1].split(',')
+                    audio_filter = ''.join([f'[{track}:a] ' for track in track_numbers]) + 'amix=inputs=' + str(len(track_numbers))
+                    subprocess.run(['ffmpeg', '-i', input_file, '-filter_complex', audio_filter, '-c:v', 'copy', '-c:a', 'aac', '-strict', 'experimental', output_file])
+                else:
+                    print("Insufficient arguments. Usage: ./ffmpeg_script.py -r -all input_file output_file or ./ffmpeg_script.py -r -t1,2,3 input_file output_file")
+            elif '-s' in sys.argv:
+                if '-a' in sys.argv and '-d' not in sys.argv:
+                    subprocess.run(['ffmpeg', '-i', input_file, '-i', sys.argv[4], '-c:v', 'copy', '-c:a', 'copy', '-c:s', 'mov_text', output_file])
+                elif '-d' in sys.argv:
+                    subprocess.run(['ffmpeg', '-i', input_file, '-c:v', 'copy', '-c:a', 'copy', '-c:s', 'mov_text', output_file])
+                else:
+                    print("Insufficient arguments. Usage: ./ffmpeg_script.py -s -a input_file output_file or ./ffmpeg_script.py -s -d input_file output_file")
+            else:
+                print("Invalid options for audio extraction or adding subtitles. Use '-r' to remove audio or '-s' to add subtitles.")
+        elif sys.argv[1] == '-s':
+            # Add subtitles or extract subtitles
+            if '-a' in sys.argv and '-d' not in sys.argv:
+                subprocess.run(['ffmpeg', '-i', input_file, '-i', sys.argv[4], '-c:v', 'copy', '-c:a', 'copy', '-c:s', 'mov_text', output_file])
+            elif '-d' in sys.argv:
+                subprocess.run(['ffmpeg', '-i', input_file, '-c:v', 'copy', '-c:a', 'copy', '-c:s', 'mov_text', output_file])
+            else:
+                print("Insufficient arguments. Usage: ./ffmpeg_script.py -s -a input_file output_file or ./ffmpeg_script.py -s -d input_file output_file")
+        elif sys.argv[1] == '-r':
+            # Remove audio or specific audio tracks
+            if '-all' in sys.argv:
+                subprocess.run(['ffmpeg', '-i', input_file, '-an', output_file])
+            elif '-t' in sys.argv and sys.argv.index('-t') + 1 < len(sys.argv):
+                track_numbers = sys.argv[sys.argv.index('-t') + 1].split(',')
+                audio_filter = ''.join([f'[{track}:a] ' for track in track_numbers]) + 'amix=inputs=' + str(len(track_numbers))
+                subprocess.run(['ffmpeg', '-i', input_file, '-filter_complex', audio_filter, '-c:v', 'copy', '-c:a', 'aac', '-strict', 'experimental', output_file])
+            else:
+                print("Insufficient arguments. Usage: ./ffmpeg_script.py -r -all input_file output_file or ./ffmpeg_script.py -r -t1,2,3 input_file output_file")
+    else:
+        print("Unexpected error occurred. Please check ffmpeg installation manually.")
+
+if __name__ == "__main__":
+    main()
 
